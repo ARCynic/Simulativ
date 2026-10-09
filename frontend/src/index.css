@@ -1,0 +1,149 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  --color-sim-bg: #071019;
+  --color-sim-surface: #0c1922;
+  --color-sim-raised: #10232e;
+  --color-sim-border: rgba(154, 189, 198, 0.18);
+  --color-sim-border-strong: rgba(154, 189, 198, 0.34);
+  --color-sim-text: #e6f0f2;
+  --color-sim-muted: #8fa5ad;
+  --color-sim-faint: #5e757e;
+  --color-sim-cyan: #6be3df;
+  --color-sim-blue: #83b9ff;
+  --color-sim-amber: #efbd70;
+  --color-sim-violet: #b79cff;
+  --color-sim-green: #9cdda9;
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    min-width: 320px;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    min-width: 320px;
+    min-height: 100vh;
+    margin: 0;
+    color: var(--color-sim-text);
+    background-color: var(--color-sim-bg);
+    background-image:
+      linear-gradient(
+        rgba(122, 176, 183, 0.035) 1px,
+        transparent 1px
+      ),
+      linear-gradient(
+        90deg,
+        rgba(122, 176, 183, 0.035) 1px,
+        transparent 1px
+      ),
+      radial-gradient(
+        circle at 75% 8%,
+        rgba(31, 128, 139, 0.18),
+        transparent 30rem
+      );
+    background-size: 64px 64px, 64px 64px, auto;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  button {
+    font: inherit;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-weight: 600;
+    letter-spacing: -0.04em;
+  }
+
+  p {
+    line-height: 1.7;
+  }
+
+  ::selection {
+    color: var(--color-sim-bg);
+    background: var(--color-sim-cyan);
+  }
+}
+
+.system-visual__orbit {
+  position: absolute;
+  inset: 13%;
+  border: 1px solid rgba(131, 185, 255, 0.26);
+  border-radius: 50%;
+  transform: rotate(33deg) scaleY(0.6);
+}
+
+.system-visual__orbit--two {
+  inset: 26%;
+  border-color: rgba(239, 189, 112, 0.28);
+  transform: rotate(-42deg) scaleY(0.65);
+}
+
+.system-visual__satellite {
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--color-sim-blue);
+  border-radius: 50%;
+  background: var(--color-sim-bg);
+  box-shadow: 0 0 14px rgba(131, 185, 255, 0.8);
+  transform: translateX(-50%);
+}
+
+.system-visual__orbit--two .system-visual__satellite {
+  border-color: var(--color-sim-amber);
+  box-shadow: 0 0 14px rgba(239, 189, 112, 0.8);
+}
+
+.placeholder-globe span {
+  position: absolute;
+  inset: 10%;
+  border: 1px solid rgba(107, 227, 223, 0.26);
+  border-radius: 50%;
+}
+
+.placeholder-globe span:nth-child(1) {
+  transform: rotate(60deg) scaleX(0.48);
+}
+
+.placeholder-globe span:nth-child(2) {
+  transform: rotate(-60deg) scaleX(0.48);
+}
+
+.placeholder-globe span:nth-child(3) {
+  transform: rotate(90deg) scaleY(0.46);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+  }
+}
