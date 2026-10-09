@@ -22,8 +22,8 @@ export interface DomainDefinition {
 
 export const siteConfig = {
   name: 'Simulativ',
-  tagline: 'Systems in motion',
-  version: 'v0.1 foundation',
+  tagline: 'Ecosystems in motion',
+  version: 'v0.1',
 } as const
 
 export const navItems: NavItem[] = [
