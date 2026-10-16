@@ -22,18 +22,18 @@ export function TopNav() {
           <span className="relative grid h-11 w-11 place-items-center">
   <span className="absolute inset-0 rounded-full bg-emerald-400/40 blur-xl transition-all duration-300 group-hover:bg-emerald-400/60 group-hover:blur-2xl" />
 
-  <span className="pointer-events-none absolute inset-1 z-20 rounded-xl bg-emerald-300/20 mix-blend-color" />
+  <span className="pointer-events-none absolute inset-1 z-20 rounded-xl bg-emerald-50/20 mix-blend-color" />
 
   <img
-    src="/logo_simulativ.png"
+    src="/logo-simulativ.png"
     alt=""
     aria-hidden="true"
-    className="relative z-10 h-11 w-11 object-contain brightness-100 saturate-[1.2] drop-shadow-[0_0_8px_rgba(74,160,91,0.85)] transition-transform duration-300 group-hover:scale-[1.08]"
+    className="relative z-10 h-14 w-14 object-contain brightness-110 saturate-[1.2] drop-shadow-[0_0_8px_rgba(74,160,91,0.85)] transition-transform duration-300 group-hover:scale-[1.08]"
   />
 </span>
 
           <span className="flex flex-col leading-none">
-        <span className="bg-gradient-to-r from-emerald-400 to-lime-300 bg-clip-text font-mono text-xl font-bold tracking-[-0.04em] text-transparent transition-all duration-300 group-hover:from-green-600 group-hover:via-emerald-500 group-hover:to-lime-400">
+        <span className="bg-gradient-to-r from-emerald-400 to-lime-300 bg-clip-text font-mono text-2xl font-bold tracking-[-0.04em] text-transparent transition-all duration-300 group-hover:from-green-600 group-hover:via-emerald-500 group-hover:to-lime-400">
           {siteConfig.name}
         </span>
 

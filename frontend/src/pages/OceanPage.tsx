@@ -1,6 +1,7 @@
 import { Panel } from '../components/ui/Panel'
 import { SectionHeading } from '../components/ui/SectionHeading'
 import { StatusBadge } from '../components/ui/StatusBadge'
+import { OceanTemperaturePreview } from '../modules/ocean-systems/components/OceanTemperaturePreview.jsx'
 
 const layers = [
   ['Biodiversity', 'OBIS', 'Species occurrence records and observations.'],
@@ -102,6 +103,7 @@ export function OceanPage() {
           description="The first implementation will establish the shared data contracts and interaction model before connecting every source."
         />
       </section>
+      <OceanTemperaturePreview />
     </div>
   )
 }
