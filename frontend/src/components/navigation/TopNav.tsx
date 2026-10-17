@@ -1,14 +1,13 @@
-import { useEffect, useState } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { useState } from 'react'
+import { NavLink } from 'react-router-dom'
 import { navItems, siteConfig } from '../../config/site'
 
 export function TopNav() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const { pathname } = useLocation()
 
-  useEffect(() => {
+  function closeMenu() {
     setIsMenuOpen(false)
-  }, [pathname])
+  }
 
   return (
     <header className="sticky top-0 z-50 border-b border-sim-border/60 bg-sim-bg/90 bg-[linear-gradient(to_right,rgba(82,116,92,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(82,116,92,0.06)_1px,transparent_1px)] bg-[size:42px_42px] shadow-sm backdrop-blur-xl">
@@ -16,31 +15,32 @@ export function TopNav() {
         <NavLink
           to="/"
           end
+          onClick={closeMenu}
           aria-label={`${siteConfig.name} home`}
           className="group mr-auto flex items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sim-cyan/50"
         >
           <span className="relative grid h-11 w-11 place-items-center">
-  <span className="absolute inset-0 rounded-full bg-emerald-400/40 blur-xl transition-all duration-300 group-hover:bg-emerald-400/60 group-hover:blur-2xl" />
+            <span className="absolute inset-0 rounded-full bg-emerald-400/40 blur-xl transition-all duration-300 group-hover:bg-emerald-400/60 group-hover:blur-2xl" />
 
-  <span className="pointer-events-none absolute inset-1 z-20 rounded-xl bg-emerald-50/20 mix-blend-color" />
+            <span className="pointer-events-none absolute inset-1 z-20 rounded-xl bg-emerald-50/20 mix-blend-color" />
 
-  <img
-    src="/logo-simulativ.png"
-    alt=""
-    aria-hidden="true"
-    className="relative z-10 h-14 w-14 object-contain brightness-110 saturate-[1.2] drop-shadow-[0_0_8px_rgba(74,160,91,0.85)] transition-transform duration-300 group-hover:scale-[1.08]"
-  />
-</span>
+            <img
+              src="/logo-simulativ.png"
+              alt=""
+              aria-hidden="true"
+              className="relative z-10 h-14 w-14 object-contain brightness-110 saturate-[1.2] drop-shadow-[0_0_8px_rgba(74,160,91,0.85)] transition-transform duration-300 group-hover:scale-[1.08]"
+            />
+          </span>
 
           <span className="flex flex-col leading-none">
-        <span className="bg-gradient-to-r from-emerald-400 to-lime-300 bg-clip-text font-mono text-2xl font-bold tracking-[-0.04em] text-transparent transition-all duration-300 group-hover:from-green-600 group-hover:via-emerald-500 group-hover:to-lime-400">
-          {siteConfig.name}
-        </span>
+            <span className="bg-gradient-to-r from-emerald-400 to-lime-300 bg-clip-text font-mono text-2xl font-bold tracking-[-0.04em] text-transparent transition-all duration-300 group-hover:from-green-600 group-hover:via-emerald-500 group-hover:to-lime-400">
+              {siteConfig.name}
+            </span>
 
-        <span className="mt-1 bg-gradient-to-r from-emerald-700 via-green-600 to-lime-600 bg-clip-text font-mono text-[9px] font-medium uppercase tracking-[0.16em] text-transparent">
-          {siteConfig.tagline ?? 'Public data / systems / simulation'}
-        </span>
-      </span>
+            <span className="mt-1 bg-gradient-to-r from-emerald-700 via-green-600 to-lime-600 bg-clip-text font-mono text-[9px] font-medium uppercase tracking-[0.16em] text-transparent">
+              {siteConfig.tagline ?? 'Public data / systems / simulation'}
+            </span>
+          </span>
         </NavLink>
 
         <button
@@ -55,9 +55,7 @@ export function TopNav() {
           <span className="flex h-3 w-4 flex-col justify-center gap-1.5 overflow-hidden">
             <span
               className={`h-px bg-sim-cyan transition-all duration-300 ${
-                isMenuOpen
-                  ? 'w-4 translate-y-[3.5px] rotate-45'
-                  : 'w-4'
+                isMenuOpen ? 'w-4 translate-y-[3.5px] rotate-45' : 'w-4'
               }`}
             />
 
@@ -84,6 +82,7 @@ export function TopNav() {
                 key={item.to}
                 to={item.to}
                 end={item.to === '/'}
+                onClick={closeMenu}
                 className={({ isActive }) =>
                   `flex min-h-10 flex-1 items-center justify-center rounded-full px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sim-cyan/50 sm:min-h-9 sm:flex-none sm:px-4 ${
                     isActive
