@@ -1,0 +1,54 @@
+{
+  "source": {
+    "processedAt": "2026-10-20T00:35:34.679368+00:00",
+    "migration": {
+      "provider": "United Nations DESA Population Division",
+      "dataset": "International Migrant Stock 2024: Destination and origin",
+      "sourceFile": "undesa_pd_2024_ims_stock_by_sex_destination_and_origin.xlsx",
+      "sheet": "Table 1",
+      "headerRowZeroBased": 10,
+      "referenceYears": [
+        1990,
+        1995,
+        2000,
+        2005,
+        2010,
+        2015,
+        2020,
+        2024
+      ],
+      "stockUnitInSource": "people",
+      "stockUnitOutput": "people",
+      "auditRows": 224239,
+      "countryPairRows": 68941
+    },
+    "population": {
+      "provider": "United Nations DESA Population Division",
+      "dataset": "World Population Prospects 2024",
+      "sourceFile": "WPP2024_Demographic_Indicators_Medium.csv",
+      "populationColumn": "TPopulation1July",
+      "populationUnitInSource": "thousands",
+      "populationUnitOutput": "people",
+      "yearMin": 1990,
+      "yearMax": 2100,
+      "countryCount": 237
+    }
+  },
+  "counts": {
+    "populationRows": 26307,
+    "populationCountries": 237,
+    "migrationAuditRows": 224239,
+    "migrationPairRows": 68941
+  },
+  "checks": {
+    "migrationYearsExact": true,
+    "noNegativePopulation": true,
+    "noNegativeMigrationStock": true,
+    "countryPairsHaveIso3": true
+  },
+  "warnings": [
+    "UN DESA values are migrant-stock estimates, not annual migration flows.",
+    "No synthetic migration years or migration projections were generated.",
+    "The UI payload contains the largest --top-flows edges per reference year; migration_pairs.json contains all mapped country pairs."
+  ]
+}
