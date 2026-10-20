@@ -29,7 +29,7 @@ export const siteConfig = {
 export const navItems: NavItem[] = [
   { label: 'Overview', to: '/' },
   { label: 'Ocean systems', to: '/ocean' },
-  { label: 'Datasets', to: '/datasets' },
+  { label: 'Infrastructure', to: '/infrastructure' },
   { label: 'About', to: '/about' },
 ]
 

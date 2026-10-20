@@ -6,7 +6,7 @@ import { HomePage } from './pages/Homepage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { OceanPage } from './modules/ocean-systems/pages/OceanPage'
 import { InfrastructurePage } from './modules/infrastructure/pages/InfrastructurePage'
-import { MigrationPage } from './modules/infrastructure/pages/migration/MigrationPage'
+import { MigrationPage } from './modules/infrastructure/pages/migration/frontend_MigrationPage'
 
 function App() {
   return (
