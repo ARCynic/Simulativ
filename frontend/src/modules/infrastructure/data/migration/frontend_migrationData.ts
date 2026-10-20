@@ -1,6 +1,7 @@
 import processedData from '../processed/migrationData.json'
 
 export type MigrationMetric = 'inboundStock' | 'share'
+export type MigrationDirection = 'inbound' | 'outbound'
 
 export type MigrationCountry = {
   iso3: string
@@ -8,9 +9,7 @@ export type MigrationCountry = {
   numericCode: string | null
   population: number | null
   inboundMigrantStock: number
-  inboundMigrantStockMillions: number
   outboundMigrantStock: number
-  outboundMigrantStockMillions: number
   migrantSharePercent: number | null
 }
 
@@ -20,7 +19,6 @@ export type MigrationFlow = {
   destinationIso3: string
   destinationName: string
   migrantStock: number
-  migrantStockMillions: number
 }
 
 export type MigrationSnapshot = {
@@ -54,7 +52,6 @@ type ProcessedFlow = {
 
 type ProcessedSnapshot = {
   year: number
-  flowCount?: number
   countries: ProcessedCountrySnapshot[]
   flows: ProcessedFlow[]
 }
@@ -65,7 +62,6 @@ type ProcessedMigrationData = {
   countries: ProcessedCountry[]
   snapshots: ProcessedSnapshot[]
   source: {
-    processedAt: string
     migration: {
       provider: string
       dataset: string
@@ -79,47 +75,32 @@ type ProcessedMigrationData = {
 
 const data = processedData as unknown as ProcessedMigrationData
 
-function assertDataShape(value: ProcessedMigrationData) {
-  if (
-    !Array.isArray(value.referenceYears) ||
-    !Array.isArray(value.countries) ||
-    !Array.isArray(value.snapshots) ||
-    value.snapshots.length === 0 ||
-    !value.snapshots.every(
-      (snapshot) =>
-        Array.isArray(snapshot.countries) &&
-        Array.isArray(snapshot.flows),
-    )
-  ) {
-    throw new Error(
-      'Invalid migrationData.json. Regenerate the migration data.',
-    )
-  }
+if (
+  !Array.isArray(data.referenceYears) ||
+  !Array.isArray(data.countries) ||
+  !Array.isArray(data.snapshots) ||
+  data.snapshots.length === 0
+) {
+  throw new Error(
+    'Invalid migrationData.json. Regenerate and copy the processed file from the backend.',
+  )
 }
 
-assertDataShape(data)
-
 export const MIGRATION_YEARS = data.referenceYears
-
 export const MIGRATION_START_YEAR = MIGRATION_YEARS[0]
-
 export const MIGRATION_END_YEAR =
   MIGRATION_YEARS[MIGRATION_YEARS.length - 1]
 
 export const DEFAULT_COUNTRY_CODE = 'DEU'
 
-export const migrationDataNote = `${data.source.migration.dataset} · ${data.source.population.dataset}`
+export const migrationDataNote =
+  `${data.source.migration.dataset} · ${data.source.population.dataset}`
 
 const countryMetadata = new Map(
-  data.countries.map((country) => [
-    country.code,
-    country,
-  ]),
+  data.countries.map((country) => [country.code, country]),
 )
 
-function normalizeNumericCode(
-  value: string | number | null,
-) {
+function normalizeNumericCode(value: string | number | null) {
   if (value === null || value === undefined || value === '') {
     return null
   }
@@ -132,15 +113,11 @@ function getClosestSnapshot(year: number) {
     const closestDistance = Math.abs(closest.year - year)
     const snapshotDistance = Math.abs(snapshot.year - year)
 
-    return snapshotDistance < closestDistance
-      ? snapshot
-      : closest
+    return snapshotDistance < closestDistance ? snapshot : closest
   })
 }
 
-export function getMigrationSnapshot(
-  year: number,
-): MigrationSnapshot {
+export function getMigrationSnapshot(year: number): MigrationSnapshot {
   const sourceSnapshot = getClosestSnapshot(year)
 
   return {
@@ -149,14 +126,6 @@ export function getMigrationSnapshot(
     countries: sourceSnapshot.countries.map((country) => {
       const metadata = countryMetadata.get(country.iso3)
 
-      const inboundStock =
-        Number(country.migrant_stock_destination) || 0
-
-      const outboundStock =
-        Number(
-          country.migrant_stock_origin_published_pairs,
-        ) || 0
-
       return {
         iso3: country.iso3,
         name: country.country_name,
@@ -164,33 +133,23 @@ export function getMigrationSnapshot(
           metadata?.numericCode ?? null,
         ),
         population: country.total_population,
-        inboundMigrantStock: inboundStock,
-        inboundMigrantStockMillions:
-          inboundStock / 1_000_000,
-        outboundMigrantStock: outboundStock,
-        outboundMigrantStockMillions:
-          outboundStock / 1_000_000,
-        migrantSharePercent:
-          country.migrant_share_percent,
+
+        inboundMigrantStock:
+          Number(country.migrant_stock_destination) || 0,
+
+        outboundMigrantStock:
+          Number(country.migrant_stock_origin_published_pairs) || 0,
+
+        migrantSharePercent: country.migrant_share_percent,
       }
     }),
 
-    flows: sourceSnapshot.flows.map((flow) => {
-      const stock = Number(flow.migrant_stock) || 0
-
-      return {
-        originIso3: flow.origin_iso3,
-        originName: flow.origin_name,
-        destinationIso3: flow.destination_iso3,
-        destinationName: flow.destination_name,
-        migrantStock: stock,
-        migrantStockMillions: stock / 1_000_000,
-      }
-    }),
+    flows: sourceSnapshot.flows.map((flow) => ({
+      originIso3: flow.origin_iso3,
+      originName: flow.origin_name,
+      destinationIso3: flow.destination_iso3,
+      destinationName: flow.destination_name,
+      migrantStock: Number(flow.migrant_stock) || 0,
+    })),
   }
-}
-
-export const migrationSource = {
-  migration: data.source.migration,
-  population: data.source.population,
 }
