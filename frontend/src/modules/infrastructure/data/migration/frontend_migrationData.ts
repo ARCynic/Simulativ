@@ -1,16 +1,17 @@
 import processedData from '../processed/migrationData.json'
 
-export type MigrationMetric = 'stock' | 'share'
+export type MigrationMetric = 'inboundStock' | 'share'
 
 export type MigrationCountry = {
   iso3: string
   name: string
   numericCode: string | null
   population: number | null
-  migrantStock: number
-  migrantStockMillions: number
+  inboundMigrantStock: number
+  inboundMigrantStockMillions: number
+  outboundMigrantStock: number
+  outboundMigrantStockMillions: number
   migrantSharePercent: number | null
-  migrantStockOriginPairs: number
 }
 
 export type MigrationFlow = {
@@ -53,6 +54,7 @@ type ProcessedFlow = {
 
 type ProcessedSnapshot = {
   year: number
+  flowCount?: number
   countries: ProcessedCountrySnapshot[]
   flows: ProcessedFlow[]
 }
@@ -82,10 +84,15 @@ function assertDataShape(value: ProcessedMigrationData) {
     !Array.isArray(value.referenceYears) ||
     !Array.isArray(value.countries) ||
     !Array.isArray(value.snapshots) ||
-    value.snapshots.length === 0
+    value.snapshots.length === 0 ||
+    !value.snapshots.every(
+      (snapshot) =>
+        Array.isArray(snapshot.countries) &&
+        Array.isArray(snapshot.flows),
+    )
   ) {
     throw new Error(
-      'Invalid migrationData.json. Check src/modules/infrastructure/data/processed/migrationData.json.',
+      'Invalid migrationData.json. Regenerate the migration data.',
     )
   }
 }
@@ -104,7 +111,10 @@ export const DEFAULT_COUNTRY_CODE = 'DEU'
 export const migrationDataNote = `${data.source.migration.dataset} · ${data.source.population.dataset}`
 
 const countryMetadata = new Map(
-  data.countries.map((country) => [country.code, country]),
+  data.countries.map((country) => [
+    country.code,
+    country,
+  ]),
 )
 
 function normalizeNumericCode(
@@ -138,8 +148,14 @@ export function getMigrationSnapshot(
 
     countries: sourceSnapshot.countries.map((country) => {
       const metadata = countryMetadata.get(country.iso3)
-      const stock =
+
+      const inboundStock =
         Number(country.migrant_stock_destination) || 0
+
+      const outboundStock =
+        Number(
+          country.migrant_stock_origin_published_pairs,
+        ) || 0
 
       return {
         iso3: country.iso3,
@@ -148,13 +164,14 @@ export function getMigrationSnapshot(
           metadata?.numericCode ?? null,
         ),
         population: country.total_population,
-        migrantStock: stock,
-        migrantStockMillions: stock / 1_000_000,
-        migrantSharePercent: country.migrant_share_percent,
-        migrantStockOriginPairs:
-          Number(
-            country.migrant_stock_origin_published_pairs,
-          ) || 0,
+        inboundMigrantStock: inboundStock,
+        inboundMigrantStockMillions:
+          inboundStock / 1_000_000,
+        outboundMigrantStock: outboundStock,
+        outboundMigrantStockMillions:
+          outboundStock / 1_000_000,
+        migrantSharePercent:
+          country.migrant_share_percent,
       }
     }),
 

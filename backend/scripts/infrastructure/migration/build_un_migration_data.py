@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -12,23 +13,25 @@ import pandas as pd
 
 MIGRATION_YEARS = (1990, 1995, 2000, 2005, 2010, 2015, 2020, 2024)
 ISO3_PATTERN = re.compile(r"^[A-Z]{3}$")
+MISSING_VALUES = {"", "-", "—", "..", "...", "na", "n/a", "null"}
 
 
 def repository_root() -> Path:
-    """Return the Simulativ project root.
+    """Find the repository containing the backend directory.
 
-    This file is located at:
-    simulativ/backend/scripts/infrastructure/migration/
+    The script is expected at:
+    backend/scripts/infrastructure/migration/build_un_migration_data.py
     """
-    root = Path(__file__).resolve().parents[4]
+    script = Path(__file__).resolve()
 
-    if not (root / "backend").is_dir():
-        raise RuntimeError(
-            f"Could not identify the Simulativ project root from {__file__}. "
-            f"Expected a backend directory at: {root / 'backend'}"
-        )
+    for candidate in (script.parent, *script.parents):
+        if (candidate / "backend").is_dir():
+            return candidate
 
-    return root
+    raise RuntimeError(
+        "Could not find the repository root. Expected a 'backend' directory "
+        f"above {script}."
+    )
 
 
 def clean_text(value: Any) -> str:
@@ -48,6 +51,12 @@ def normalized(value: Any) -> str:
     return re.sub(r"[^a-z0-9]+", "_", clean_text(value).lower()).strip("_")
 
 
+def name_key(value: Any) -> str:
+    text = unicodedata.normalize("NFKD", clean_text(value))
+    text = text.encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]+", "", text.lower())
+
+
 def unique_columns(values: list[Any]) -> list[str]:
     result: list[str] = []
     seen: dict[str, int] = {}
@@ -64,7 +73,7 @@ def unique_columns(values: list[Any]) -> list[str]:
 def number(value: Any) -> float | None:
     text = clean_text(value).replace(",", "").replace(" ", "")
 
-    if not text or text.lower() in {"-", "—", "..", "...", "na", "n/a", "null"}:
+    if text.lower() in MISSING_VALUES:
         return None
 
     parsed = pd.to_numeric(text, errors="coerce")
@@ -77,22 +86,16 @@ def location_code(value: Any) -> str | None:
     if not text:
         return None
 
-    if re.fullmatch(r"\d+\.0+", text):
-        text = text.split(".", 1)[0]
-
-    if not text.isdigit():
+    parsed = pd.to_numeric(text, errors="coerce")
+    if pd.isna(parsed) or not float(parsed).is_integer():
         return None
 
-    return text.zfill(3)
+    return str(int(parsed)).zfill(3)
 
 
 def iso3(value: Any) -> str | None:
     text = clean_text(value).upper()
     return text if ISO3_PATTERN.fullmatch(text) else None
-
-
-def name_key(value: Any) -> str:
-    return re.sub(r"[^a-z0-9]+", "", clean_text(value).lower())
 
 
 def resolve_path(value: str | Path, root: Path) -> Path:
@@ -101,9 +104,7 @@ def resolve_path(value: str | Path, root: Path) -> Path:
     if path.is_absolute():
         return path
 
-    candidates = [Path.cwd() / path, root / path]
-
-    for candidate in candidates:
+    for candidate in (Path.cwd() / path, root / path):
         if candidate.exists():
             return candidate.resolve()
 
@@ -113,7 +114,7 @@ def resolve_path(value: str | Path, root: Path) -> Path:
 def read_csv_or_excel(path: Path) -> pd.DataFrame:
     suffixes = {suffix.lower() for suffix in path.suffixes}
 
-    if ".csv" in suffixes or ".txt" in suffixes or ".gz" in suffixes:
+    if suffixes.intersection({".csv", ".txt", ".gz"}):
         return pd.read_csv(path, dtype=object, low_memory=False, compression="infer")
 
     return pd.read_excel(path, dtype=object)
@@ -130,48 +131,50 @@ def find_population_columns(frame: pd.DataFrame) -> dict[str, str]:
                     return column
         return None
 
-    year_column = first("year", "time")
-    name_column = first("location", "country", "country_name", "entity", "name")
-    iso_column = first("iso3_alpha_code", "iso3_code", "iso3", "iso_code")
-    code_column = first("location_code", "locid", "m49", "location_id")
-    population_column = first(
-        "tpopulation1july",
-        "population1july",
-        "population",
-        "total_population",
-        "poptotal",
-        "value",
-    )
-    variant_column = first("variant", "projection_variant", "scenario")
+    result: dict[str, str] = {}
+    candidates = {
+        "year": ("year", "time"),
+        "name": ("location", "country", "country_name", "entity", "name"),
+        "iso3": ("iso3_alpha_code", "iso3_code", "iso3", "iso_code"),
+        "population": (
+            "tpopulation1july",
+            "population1july",
+            "population",
+            "total_population",
+            "poptotal",
+            "value",
+        ),
+    }
 
-    missing = []
-    if year_column is None:
-        missing.append("Year")
-    if name_column is None:
-        missing.append("Location")
-    if iso_column is None:
-        missing.append("ISO3 Alpha-code")
-    if population_column is None:
-        missing.append("TPopulation1July")
+    missing: list[str] = []
+    labels = {
+        "year": "Year/Time",
+        "name": "Location",
+        "iso3": "ISO3 code",
+        "population": "TPopulation1July/Population",
+    }
+
+    for key, names in candidates.items():
+        column = first(*names)
+        if column is None:
+            missing.append(labels[key])
+        else:
+            result[key] = column
 
     if missing:
         raise ValueError(
-            "Could not identify these columns in the WPP file: "
+            "Could not identify these WPP columns: "
             + ", ".join(missing)
             + f"\nColumns found: {columns}"
         )
 
-    result = {
-        "year": year_column,
-        "name": name_column,
-        "iso3": iso_column,
-        "population": population_column,
-    }
-
-    if code_column:
-        result["location_code"] = code_column
-    if variant_column:
-        result["variant"] = variant_column
+    for key, names in {
+        "location_code": ("location_code", "locid", "m49", "location_id"),
+        "variant": ("variant", "projection_variant", "scenario"),
+    }.items():
+        column = first(*names)
+        if column is not None:
+            result[key] = column
 
     return result
 
@@ -198,7 +201,12 @@ def load_population(
     unit: str,
     minimum_year: int = min(MIGRATION_YEARS),
     maximum_year: int = 2100,
-) -> tuple[pd.DataFrame, dict[str, dict[str, str | None]], dict[str, Any]]:
+) -> tuple[
+    pd.DataFrame,
+    dict[str, dict[str, str | None]],
+    dict[str, str],
+    dict[str, Any],
+]:
     frame = read_csv_or_excel(path)
     columns = find_population_columns(frame)
 
@@ -227,8 +235,7 @@ def load_population(
 
     if data.empty:
         raise ValueError(
-            f"No usable population rows remained after reading {path.name}. "
-            "Check the WPP CSV columns and year range."
+            f"No usable population rows remained after reading {path.name}."
         )
 
     data["year"] = data["year"].astype(int)
@@ -259,7 +266,8 @@ def load_population(
     data["population_phase"] = data.apply(
         lambda row: (
             "projected"
-            if int(row["year"]) >= 2024 and "estimate" not in row["variant"].lower()
+            if int(row["year"]) >= 2024
+            and "estimate" not in row["variant"].lower()
             else "estimated"
         ),
         axis=1,
@@ -278,12 +286,18 @@ def load_population(
     ].rename(columns={"variant": "variant_name"})
 
     location_map: dict[str, dict[str, str | None]] = {}
+    name_map: dict[str, str] = {}
+
     for row in population.itertuples(index=False):
         if row.location_code and row.iso3:
             location_map[row.location_code] = {
                 "iso3": row.iso3,
                 "name": row.country_name,
             }
+
+        key = name_key(row.country_name)
+        if key and row.iso3:
+            name_map.setdefault(key, row.iso3)
 
     metadata = {
         "provider": "United Nations DESA Population Division",
@@ -297,7 +311,7 @@ def load_population(
         "countryCount": int(population["iso3"].nunique()),
     }
 
-    return population, location_map, metadata
+    return population, location_map, name_map, metadata
 
 
 def read_migration_sheet(path: Path) -> tuple[pd.DataFrame, str, int]:
@@ -315,17 +329,18 @@ def read_migration_sheet(path: Path) -> tuple[pd.DataFrame, str, int]:
             if has_destination and has_origin and has_year:
                 frame = raw.iloc[row_index + 1 :].copy()
                 frame.columns = unique_columns(raw.iloc[row_index].tolist())
-                frame = frame.dropna(how="all").reset_index(drop=True)
-                return frame, sheet, row_index
+                return frame.dropna(how="all").reset_index(drop=True), sheet, row_index
 
     raise ValueError(
-        f"Could not locate the UN DESA migration table in {path.name}. "
+        f"Could not locate the migration table in {path.name}. "
         f"Sheets found: {workbook.sheet_names}"
     )
 
 
 def first_column(
-    columns: list[str], required: tuple[str, ...], forbidden: tuple[str, ...] = ()
+    columns: list[str],
+    required: tuple[str, ...],
+    forbidden: tuple[str, ...] = (),
 ) -> str | None:
     for column in columns:
         value = normalized(column)
@@ -336,12 +351,12 @@ def first_column(
     return None
 
 
-def migration_columns(frame: pd.DataFrame) -> tuple[str, str, str | None, str | None, dict[int, str]]:
+def migration_columns(
+    frame: pd.DataFrame,
+) -> tuple[str, str, str | None, str | None, dict[int, str]]:
     columns = list(frame.columns)
-
     destination_name = first_column(columns, ("destination",), ("code",))
     origin_name = first_column(columns, ("origin",), ("code",))
-
     destination_code = first_column(columns, ("destination", "code"))
     origin_code = first_column(columns, ("origin", "code"))
 
@@ -352,7 +367,6 @@ def migration_columns(frame: pd.DataFrame) -> tuple[str, str, str | None, str | 
             if "location_code" in normalized(column)
             or normalized(column) in {"locid", "locationid"}
         ]
-
         if destination_code is None and len(code_columns) >= 1:
             destination_code = code_columns[0]
         if origin_code is None and len(code_columns) >= 2:
@@ -365,19 +379,19 @@ def migration_columns(frame: pd.DataFrame) -> tuple[str, str, str | None, str | 
         and int(normalized(column)) in MIGRATION_YEARS
     }
 
-    missing = []
+    missing: list[str] = []
     if destination_name is None:
         missing.append("Destination")
     if origin_name is None:
         missing.append("Origin")
     if len(year_columns) != len(MIGRATION_YEARS):
-        missing.append("all migration years")
+        missing.append("all reference years")
 
     if missing:
         raise ValueError(
             "Could not identify "
             + ", ".join(missing)
-            + f" in the UN DESA workbook.\nColumns found: {columns}"
+            + f" in the migration workbook.\nColumns found: {columns}"
         )
 
     return destination_name, origin_name, destination_code, origin_code, year_columns
@@ -386,26 +400,29 @@ def migration_columns(frame: pd.DataFrame) -> tuple[str, str, str | None, str | 
 def load_migration(
     path: Path,
     location_map: dict[str, dict[str, str | None]],
+    name_map: dict[str, str],
     stock_unit: str,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
     frame, sheet, header_row = read_migration_sheet(path)
-    destination_name_col, origin_name_col, destination_code_col, origin_code_col, years = (
-        migration_columns(frame)
-    )
+    (
+        destination_name_col,
+        origin_name_col,
+        destination_code_col,
+        origin_code_col,
+        years,
+    ) = migration_columns(frame)
 
-    selected = pd.DataFrame()
+    selected = pd.DataFrame(index=frame.index)
     selected["destination_name"] = frame[destination_name_col].map(clean_text)
     selected["origin_name"] = frame[origin_name_col].map(clean_text)
-
-    if destination_code_col:
-        selected["destination_location_code"] = frame[destination_code_col].map(location_code)
-    else:
-        selected["destination_location_code"] = None
-
-    if origin_code_col:
-        selected["origin_location_code"] = frame[origin_code_col].map(location_code)
-    else:
-        selected["origin_location_code"] = None
+    selected["destination_location_code"] = (
+        frame[destination_code_col].map(location_code)
+        if destination_code_col
+        else None
+    )
+    selected["origin_location_code"] = (
+        frame[origin_code_col].map(location_code) if origin_code_col else None
+    )
 
     for year, column in years.items():
         selected[f"stock_{year}"] = frame[column].map(number)
@@ -430,9 +447,10 @@ def load_migration(
     ).round().astype("int64")
 
     def mapped_iso(code: Any, name: Any) -> str | None:
-        if code and code in location_map:
-            return location_map[code].get("iso3")
-        return None
+        code_value = location_code(code)
+        if code_value and code_value in location_map:
+            return location_map[code_value].get("iso3")
+        return name_map.get(name_key(name))
 
     long["destination_iso3"] = long.apply(
         lambda row: mapped_iso(
@@ -441,18 +459,28 @@ def load_migration(
         axis=1,
     )
     long["origin_iso3"] = long.apply(
-        lambda row: mapped_iso(row["origin_location_code"], row["origin_name"]),
+        lambda row: mapped_iso(
+            row["origin_location_code"], row["origin_name"]
+        ),
         axis=1,
     )
 
+    def canonical_name(code: Any, name: Any) -> str:
+        code_value = location_code(code)
+        if code_value and code_value in location_map:
+            return clean_text(location_map[code_value].get("name")) or clean_text(name)
+        return clean_text(name)
+
     long["destination_name"] = long.apply(
-        lambda row: location_map.get(row["destination_location_code"], {}).get("name")
-        or row["destination_name"],
+        lambda row: canonical_name(
+            row["destination_location_code"], row["destination_name"]
+        ),
         axis=1,
     )
     long["origin_name"] = long.apply(
-        lambda row: location_map.get(row["origin_location_code"], {}).get("name")
-        or row["origin_name"],
+        lambda row: canonical_name(
+            row["origin_location_code"], row["origin_name"]
+        ),
         axis=1,
     )
 
@@ -493,33 +521,53 @@ def load_migration(
     return audit, pairs, metadata
 
 
+def build_destination_totals(audit: pd.DataFrame) -> pd.DataFrame:
+    """Build inbound migrant stock without double-counting UN aggregates."""
+    rows = audit[audit["destination_iso3"].notna()].copy()
+
+    origin_names = rows["origin_name"].map(normalized)
+    world_mask = rows["origin_location_code"].eq("2003") | origin_names.isin(
+        {"world", "world_total", "total_world"}
+    )
+
+    world = (
+        rows[world_mask]
+        .groupby(["year", "destination_iso3"], as_index=False)["migrant_stock"]
+        .sum()
+        .rename(
+            columns={
+                "destination_iso3": "iso3",
+                "migrant_stock": "world_total",
+            }
+        )
+    )
+
+    country_origins = (
+        rows[rows["origin_iso3"].notna() & ~world_mask]
+        .groupby(["year", "destination_iso3"], as_index=False)["migrant_stock"]
+        .sum()
+        .rename(
+            columns={
+                "destination_iso3": "iso3",
+                "migrant_stock": "country_origin_total",
+            }
+        )
+    )
+
+    totals = country_origins.merge(world, on=["year", "iso3"], how="outer")
+    totals["migrant_stock_destination"] = totals["world_total"].fillna(
+        totals["country_origin_total"]
+    )
+
+    return totals[["year", "iso3", "migrant_stock_destination"]]
+
+
 def build_country_year(
     population: pd.DataFrame,
     audit: pd.DataFrame,
     pairs: pd.DataFrame,
 ) -> pd.DataFrame:
-    # The workbook contains country rows and aggregate rows such as World,
-    # Europe, and income groups. Aggregate rows must not be summed into totals.
-    destination_rows = audit[
-        audit["destination_iso3"].notna()
-        & (
-            audit["origin_iso3"].notna()
-            | (audit["origin_location_code"] == "2003")
-        )
-    ]
-
-    destination_totals = (
-        destination_rows.groupby(
-            ["year", "destination_iso3"], as_index=False
-        )["migrant_stock"]
-        .sum()
-        .rename(
-            columns={
-                "destination_iso3": "iso3",
-                "migrant_stock": "migrant_stock_destination",
-            }
-        )
-    )
+    destination_totals = build_destination_totals(audit)
 
     origin_totals = (
         pairs.groupby(["year", "origin_iso3"], as_index=False)["migrant_stock"]
@@ -532,10 +580,9 @@ def build_country_year(
         )
     )
 
-    country_names = population[
-        ["iso3", "country_name", "location_code"]
-    ].drop_duplicates("iso3")
-
+    country_names = population[["iso3", "country_name", "location_code"]].drop_duplicates(
+        "iso3"
+    )
     migration_names = pd.concat(
         [
             audit[["origin_iso3", "origin_name", "origin_location_code"]].rename(
@@ -557,7 +604,6 @@ def build_country_year(
         ],
         ignore_index=True,
     ).dropna(subset=["iso3"])
-
     country_names = pd.concat([country_names, migration_names], ignore_index=True)
     country_names = country_names.drop_duplicates("iso3", keep="first")
 
@@ -599,21 +645,16 @@ def build_country_year(
     )
     result = result.drop(columns=["country_name_fallback", "location_code_fallback"])
 
-    for column in [
+    for column in (
         "migrant_stock_destination",
         "migrant_stock_origin_published_pairs",
-    ]:
+    ):
         result[column] = result[column].fillna(0).round().astype("int64")
 
     result["migrant_stock_available"] = result["year"].isin(MIGRATION_YEARS)
-    population_denominator = result["total_population"].where(
-        result["total_population"] > 0
-    )
+    denominator = result["total_population"].where(result["total_population"] > 0)
     result["migrant_share_percent"] = (
-        result["migrant_stock_destination"]
-        .div(population_denominator)
-        .mul(100)
-        .round(4)
+        result["migrant_stock_destination"].div(denominator).mul(100).round(4)
     )
 
     return result.sort_values(["year", "iso3"]).reset_index(drop=True)
@@ -627,8 +668,13 @@ def build_ui_payload(
     country_year: pd.DataFrame,
     pairs: pd.DataFrame,
     metadata: dict[str, Any],
-    top_flows: int,
 ) -> dict[str, Any]:
+    """Create the frontend payload with every valid pair for every year.
+
+    There is intentionally no top-N or global row limit here. The frontend
+    filters by the selected origin country and draws only its top five lines.
+    The table can still show every destination for that origin.
+    """
     countries = (
         country_year[["iso3", "country_name", "location_code"]]
         .dropna(subset=["iso3"])
@@ -636,7 +682,7 @@ def build_ui_payload(
         .sort_values("country_name")
     )
 
-    snapshots = []
+    snapshots: list[dict[str, Any]] = []
     for year in MIGRATION_YEARS:
         country_snapshot = country_year[country_year["year"] == year][
             [
@@ -649,18 +695,18 @@ def build_ui_payload(
             ]
         ]
 
-        flow_snapshot = (
-            pairs[pairs["year"] == year]
-            .sort_values("migrant_stock", ascending=False)
-            .head(top_flows)
+        all_year_pairs = pairs[pairs["year"] == year].sort_values(
+            ["origin_iso3", "migrant_stock", "destination_iso3"],
+            ascending=[True, False, True],
         )
 
         snapshots.append(
             {
                 "year": year,
+                "flowCount": int(len(all_year_pairs)),
                 "countries": json_records(country_snapshot),
                 "flows": json_records(
-                    flow_snapshot[
+                    all_year_pairs[
                         [
                             "origin_iso3",
                             "origin_name",
@@ -704,8 +750,8 @@ def write_table(frame: pd.DataFrame, output_dir: Path, name: str) -> None:
         frame.to_parquet(output_dir / f"{name}.parquet", index=False)
     except ImportError as error:
         raise RuntimeError(
-            "Parquet output requires pyarrow. Install the backend requirements with "
-            "'.\\.venv\\Scripts\\python.exe -m pip install -r requirements.txt'."
+            "Parquet output requires pyarrow. Install it with: "
+            ".\\backend\\.venv\\Scripts\\python.exe -m pip install pyarrow"
         ) from error
 
 
@@ -713,9 +759,7 @@ def main() -> None:
     root = repository_root()
     backend = root / "backend"
     default_raw = backend / "data" / "raw" / "infrastructure" / "migration"
-    default_output = (
-        backend / "data" / "processed" / "infrastructure" / "migration"
-    )
+    default_output = backend / "data" / "processed" / "infrastructure" / "migration"
 
     parser = argparse.ArgumentParser(
         description="Process UN DESA migrant stock and UN WPP 2024 data."
@@ -735,13 +779,14 @@ def main() -> None:
         "--migrant-stock-unit",
         choices=("people", "thousands"),
         default="people",
+        help="Unit used by the migration workbook values.",
     )
     parser.add_argument(
         "--population-unit",
         choices=("auto", "people", "thousands"),
         default="auto",
+        help="Unit used by the WPP population column.",
     )
-    parser.add_argument("--top-flows", type=int, default=500)
     args = parser.parse_args()
 
     migrant_file = resolve_path(args.migrant_file, root)
@@ -754,13 +799,14 @@ def main() -> None:
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    population, location_map, population_metadata = load_population(
+    population, location_map, name_map, population_metadata = load_population(
         population_file,
         args.population_unit,
     )
     audit, pairs, migration_metadata = load_migration(
         migrant_file,
         location_map,
+        name_map,
         args.migrant_stock_unit,
     )
     country_year = build_country_year(population, audit, pairs)
@@ -775,10 +821,8 @@ def main() -> None:
     write_table(pairs, output_dir, "migration_pairs")
     write_table(audit, output_dir, "migration_audit")
 
-    write_json(
-        output_dir / "migrationData.json",
-        build_ui_payload(country_year, pairs, source_metadata, max(1, args.top_flows)),
-    )
+    ui_payload = build_ui_payload(country_year, pairs, source_metadata)
+    write_json(output_dir / "migrationData.json", ui_payload)
 
     validation = {
         "source": source_metadata,
@@ -787,6 +831,7 @@ def main() -> None:
             "populationCountries": int(population["iso3"].nunique()),
             "migrationAuditRows": int(len(audit)),
             "migrationPairRows": int(len(pairs)),
+            "uiFlowRows": int(sum(snapshot["flowCount"] for snapshot in ui_payload["snapshots"])),
         },
         "checks": {
             "migrationYearsExact": sorted(audit["year"].unique().tolist())
@@ -799,11 +844,16 @@ def main() -> None:
                 pairs["origin_iso3"].notna().all()
                 and pairs["destination_iso3"].notna().all()
             ),
+            "uiContainsAllPairs": int(
+                sum(snapshot["flowCount"] for snapshot in ui_payload["snapshots"])
+            )
+            == int(len(pairs)),
         },
         "warnings": [
             "UN DESA values are migrant-stock estimates, not annual migration flows.",
             "No synthetic migration years or migration projections were generated.",
-            "The UI payload contains the largest --top-flows edges per reference year; migration_pairs.json contains all mapped country pairs.",
+            "migrationData.json contains every valid mapped country pair for each reference year.",
+            "The frontend should limit map lines to five after filtering by the selected origin country.",
         ],
     }
     write_json(output_dir / "validation.json", validation)
@@ -813,6 +863,7 @@ def main() -> None:
     print(f"Output directory: {output_dir}")
     print(f"Population rows: {len(population):,}")
     print(f"Country-pair rows: {len(pairs):,}")
+    print(f"UI flow rows: {validation['counts']['uiFlowRows']:,}")
 
 
 if __name__ == "__main__":

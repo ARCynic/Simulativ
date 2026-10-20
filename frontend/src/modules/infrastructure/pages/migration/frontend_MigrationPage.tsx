@@ -10,7 +10,7 @@ import {
 } from '../../data/migration/frontend_migrationData'
 
 const metricLabels: Record<MigrationMetric, string> = {
-  stock: 'Migrant stock',
+  inboundStock: 'Migrant stock living in country',
   share: 'Migrant share of population',
 }
 
@@ -23,12 +23,14 @@ const compactFormatter = new Intl.NumberFormat('en', {
   maximumFractionDigits: 2,
 })
 
-function formatPeople(value: number | null) {
-  return value === null ? '—' : numberFormatter.format(value)
-}
+function formatMigrationStock(value: number) {
+  if (value >= 1_000_000) {
+    const millions = value / 1_000_000
 
-function formatMillions(value: number) {
-  return `${value >= 10 ? value.toFixed(1) : value.toFixed(2)}M`
+    return `${millions >= 10 ? millions.toFixed(1) : millions.toFixed(2)}M`
+  }
+
+  return numberFormatter.format(value)
 }
 
 function formatCompact(value: number) {
@@ -36,13 +38,21 @@ function formatCompact(value: number) {
 }
 
 export function MigrationPage() {
-  const initialYearIndex = Math.max(0, MIGRATION_YEARS.length - 1)
-
-  const [yearIndex, setYearIndex] = useState(initialYearIndex)
-  const [metric, setMetric] = useState<MigrationMetric>('stock')
-  const [selectedCountryCode, setSelectedCountryCode] = useState(
-    DEFAULT_COUNTRY_CODE,
+  const initialYearIndex = Math.max(
+    0,
+    MIGRATION_YEARS.length - 1,
   )
+
+  const [yearIndex, setYearIndex] = useState(
+    initialYearIndex,
+  )
+
+  const [metric, setMetric] =
+    useState<MigrationMetric>('inboundStock')
+
+  const [selectedCountryCode, setSelectedCountryCode] =
+    useState(DEFAULT_COUNTRY_CODE)
+
   const [isPlaying, setIsPlaying] = useState(false)
 
   const selectedYear =
@@ -57,6 +67,23 @@ export function MigrationPage() {
     snapshot.countries.find(
       (country) => country.iso3 === selectedCountryCode,
     ) ?? snapshot.countries[0]
+
+  const selectedCountryIso3 =
+    selectedCountry?.iso3 ?? ''
+
+  const outgoingFlows = useMemo(
+    () =>
+      snapshot.flows
+        .filter(
+          (flow) =>
+            flow.originIso3 === selectedCountryIso3,
+        )
+        .sort(
+          (a, b) =>
+            b.migrantStock - a.migrantStock,
+        ),
+    [snapshot.flows, selectedCountryIso3],
+  )
 
   const timelineAtEnd =
     yearIndex >= MIGRATION_YEARS.length - 1
@@ -86,7 +113,7 @@ export function MigrationPage() {
   function resetView() {
     setIsPlaying(false)
     setYearIndex(initialYearIndex)
-    setMetric('stock')
+    setMetric('inboundStock')
     setSelectedCountryCode(DEFAULT_COUNTRY_CODE)
   }
 
@@ -114,8 +141,8 @@ export function MigrationPage() {
             </h1>
 
             <p className="mt-5 max-w-3xl text-base leading-7 text-emerald-100/65 sm:text-lg">
-              Explore country-level migrant stock, population share,
-              and origin–destination relationships across the
+              Explore migrant stock inside countries and
+              origin–destination relationships across the
               published UN reference years.
             </p>
           </div>
@@ -147,15 +174,17 @@ export function MigrationPage() {
 
           <MigrationMap
             countries={snapshot.countries}
+            flows={snapshot.flows}
             metric={metric}
-            selectedCountryCode={selectedCountry?.iso3 ?? ''}
+            selectedCountryCode={selectedCountryIso3}
             onCountrySelect={setSelectedCountryCode}
           />
 
           <p className="mt-4 text-xs leading-5 text-emerald-100/45">
-            {migrationDataNote}. The map uses the numeric country
-            codes shared by the processed data and the world
-            geography file.
+            {migrationDataNote}. The map fill represents migrant
+            stock living in each country. The connecting lines
+            represent the selected origin’s five largest
+            destinations.
           </p>
         </section>
 
@@ -185,7 +214,9 @@ export function MigrationPage() {
               <select
                 value={metric}
                 onChange={(event) =>
-                  setMetric(event.target.value as MigrationMetric)
+                  setMetric(
+                    event.target.value as MigrationMetric,
+                  )
                 }
                 className="w-full rounded-xl border border-emerald-200/15 bg-[#071714] px-3 py-3 text-sm text-emerald-50 outline-none transition focus:border-emerald-300/60"
               >
@@ -201,11 +232,11 @@ export function MigrationPage() {
 
             <label className="block">
               <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.15em] text-emerald-100/55">
-                Focus country
+                Origin country
               </span>
 
               <select
-                value={selectedCountry?.iso3 ?? ''}
+                value={selectedCountryIso3}
                 onChange={(event) =>
                   setSelectedCountryCode(event.target.value)
                 }
@@ -213,7 +244,9 @@ export function MigrationPage() {
               >
                 {snapshot.countries
                   .slice()
-                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .sort((a, b) =>
+                    a.name.localeCompare(b.name),
+                  )
                   .map((country) => (
                     <option
                       key={country.iso3}
@@ -255,15 +288,21 @@ export function MigrationPage() {
 
               <div className="mt-2 flex justify-between text-[10px] text-emerald-100/45">
                 <span>{MIGRATION_YEARS[0]}</span>
+
                 <span>
                   {
                     MIGRATION_YEARS[
-                      Math.floor(MIGRATION_YEARS.length / 2)
+                      Math.floor(
+                        MIGRATION_YEARS.length / 2,
+                      )
                     ]
                   }
                 </span>
+
                 <span>
-                  {MIGRATION_YEARS[MIGRATION_YEARS.length - 1]}
+                  {MIGRATION_YEARS[
+                    MIGRATION_YEARS.length - 1
+                  ]}
                 </span>
               </div>
             </div>
@@ -300,14 +339,15 @@ export function MigrationPage() {
             <div className="h-1.5 overflow-hidden rounded-full bg-emerald-950">
               <div
                 className="h-full rounded-full bg-emerald-300 transition-all duration-300"
-                style={{ width: `${progressPercent}%` }}
+                style={{
+                  width: `${progressPercent}%`,
+                }}
               />
             </div>
 
             <p className="mt-4 text-xs leading-5 text-emerald-100/50">
-              The timeline uses only the reference years present
-              in the UN DESA dataset. No migration values are
-              interpolated here.
+              Only published UN reference years are used.
+              Migration values are not artificially interpolated.
             </p>
           </div>
         </aside>
@@ -316,7 +356,7 @@ export function MigrationPage() {
       <section className="mx-auto grid max-w-7xl gap-5 px-4 pb-24 sm:px-6 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:px-8">
         <section className="rounded-[1.75rem] border border-emerald-200/15 bg-[#091c18] p-5 sm:p-7">
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">
-            Selected country / {snapshot.year}
+            Selected origin / {snapshot.year}
           </p>
 
           <div className="mt-3 flex items-start justify-between gap-4">
@@ -338,13 +378,13 @@ export function MigrationPage() {
           <div className="mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-emerald-200/10 bg-emerald-200/10">
             <div className="bg-[#071714] p-4">
               <span className="text-[10px] uppercase tracking-[0.12em] text-emerald-100/45">
-                Migrant stock
+                Inbound stock
               </span>
 
               <strong className="mt-2 block text-xl text-emerald-100">
                 {selectedCountry
-                  ? formatMillions(
-                      selectedCountry.migrantStockMillions,
+                  ? formatMigrationStock(
+                      selectedCountry.inboundMigrantStock,
                     )
                   : '—'}
               </strong>
@@ -357,7 +397,8 @@ export function MigrationPage() {
 
               <strong className="mt-2 block text-xl text-emerald-100">
                 {selectedCountry?.migrantSharePercent === null ||
-                selectedCountry?.migrantSharePercent === undefined
+                selectedCountry?.migrantSharePercent ===
+                  undefined
                   ? '—'
                   : `${selectedCountry.migrantSharePercent.toFixed(2)}%`}
               </strong>
@@ -369,19 +410,21 @@ export function MigrationPage() {
               </span>
 
               <strong className="mt-2 block text-xl text-emerald-100">
-                {formatCompact(selectedCountry?.population ?? 0)}
+                {formatCompact(
+                  selectedCountry?.population ?? 0,
+                )}
               </strong>
             </div>
 
             <div className="bg-[#071714] p-4">
               <span className="text-[10px] uppercase tracking-[0.12em] text-emerald-100/45">
-                Origin pairs
+                Outbound stock
               </span>
 
               <strong className="mt-2 block text-xl text-emerald-100">
                 {selectedCountry
-                  ? formatPeople(
-                      selectedCountry.migrantStockOriginPairs,
+                  ? formatMigrationStock(
+                      selectedCountry.outboundMigrantStock,
                     )
                   : '—'}
               </strong>
@@ -393,40 +436,59 @@ export function MigrationPage() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">
-                Largest mapped pairs / {snapshot.year}
+                All destinations / {snapshot.year}
               </p>
 
               <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-emerald-50">
-                Origin–destination layer
+                Migration from{' '}
+                {selectedCountry?.name ?? 'selected country'}
               </h2>
             </div>
 
             <span className="text-xs font-bold tracking-[0.16em] text-emerald-300/70">
-              {snapshot.flows.length}
+              {outgoingFlows.length}
             </span>
           </div>
 
-          <div className="mt-6 divide-y divide-emerald-200/10 border-y border-emerald-200/10">
-            {snapshot.flows.slice(0, 8).map((flow) => (
-              <div
-                key={`${flow.originIso3}-${flow.destinationIso3}`}
-                className="flex items-center justify-between gap-4 py-3 text-sm"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-emerald-50">
-                    {flow.originName}
-                  </p>
+          <div className="mt-6 overflow-hidden rounded-2xl border border-emerald-200/10">
+            <div className="grid grid-cols-[44px_minmax(0,1fr)_auto] gap-3 border-b border-emerald-200/10 bg-[#071714] px-4 py-3 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-100/45">
+              <span>#</span>
+              <span>Destination</span>
+              <span>Migrant stock</span>
+            </div>
 
-                  <p className="truncate text-xs text-emerald-100/45">
-                    → {flow.destinationName}
-                  </p>
-                </div>
+            <div className="max-h-[520px] divide-y divide-emerald-200/10 overflow-y-auto">
+              {outgoingFlows.length > 0 ? (
+                outgoingFlows.map((flow, index) => (
+                  <div
+                    key={`${flow.originIso3}-${flow.destinationIso3}`}
+                    className="grid grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-sm"
+                  >
+                    <span className="text-xs text-emerald-100/35">
+                      {String(index + 1).padStart(2, '0')}
+                    </span>
 
-                <strong className="shrink-0 text-emerald-200">
-                  {formatMillions(flow.migrantStockMillions)}
-                </strong>
-              </div>
-            ))}
+                    <div className="min-w-0">
+                      <p className="truncate text-emerald-50">
+                        {flow.destinationName}
+                      </p>
+
+                      <p className="truncate text-xs text-emerald-100/40">
+                        {flow.destinationIso3}
+                      </p>
+                    </div>
+
+                    <strong className="shrink-0 text-emerald-200">
+                      {formatMigrationStock(flow.migrantStock)}
+                    </strong>
+                  </div>
+                ))
+              ) : (
+                <p className="px-4 py-6 text-sm text-emerald-100/50">
+                  No origin–destination records are available for this country and year.
+                </p>
+              )}
+            </div>
           </div>
         </section>
       </section>

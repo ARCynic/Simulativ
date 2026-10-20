@@ -1,6 +1,6 @@
 {
   "source": {
-    "processedAt": "2026-10-20T00:35:34.679368+00:00",
+    "processedAt": "2026-10-20T20:50:57.311101+00:00",
     "migration": {
       "provider": "United Nations DESA Population Division",
       "dataset": "International Migrant Stock 2024: Destination and origin",
@@ -38,17 +38,20 @@
     "populationRows": 26307,
     "populationCountries": 237,
     "migrationAuditRows": 224239,
-    "migrationPairRows": 68941
+    "migrationPairRows": 68941,
+    "uiFlowRows": 68941
   },
   "checks": {
     "migrationYearsExact": true,
     "noNegativePopulation": true,
     "noNegativeMigrationStock": true,
-    "countryPairsHaveIso3": true
+    "countryPairsHaveIso3": true,
+    "uiContainsAllPairs": true
   },
   "warnings": [
     "UN DESA values are migrant-stock estimates, not annual migration flows.",
     "No synthetic migration years or migration projections were generated.",
-    "The UI payload contains the largest --top-flows edges per reference year; migration_pairs.json contains all mapped country pairs."
+    "migrationData.json contains every valid mapped country pair for each reference year.",
+    "The frontend should limit map lines to five after filtering by the selected origin country."
   ]
 }
